@@ -1,0 +1,24 @@
+# >>> KIỂM TRA LẠI THÔNG TIN CỦA BẠN TRƯỚC KHI DEMO <<<
+student_name: "Pham Viet Anh"
+student_id: "23020722"
+
+# P = (hai chữ số cuối MSSV) mod 6  -> được TÍNH TỰ ĐỘNG trong code
+# (ur3_llm_control/student_task.py), không cần và không nên điền tay.
+# Với 23020722: P = 22 mod 6 = 4 -> Zone A = blue, Zone B = red, Zone C = yellow.
+
+llm:
+  # 9Router: endpoint OpenAI-compatible, chạy local ở cổng 20128
+  base_url: "http://localhost:20128/v1"
+
+  # API key CỦA 9ROUTER (dashboard > Endpoint), KHÔNG phải key Google.
+  # Khuyến nghị để trống và dùng biến môi trường NINEROUTER_API_KEY
+  # (để không lộ key khi nộp bài / đẩy lên git).
+  api_key: ""
+
+  # Tên model dạng <alias provider>/<model> theo 9Router.
+  # Biến môi trường NINEROUTER_MODEL ghi đè giá trị này.
+  model: "oc/muse-spark-1.2-contributor-free"
+
+  temperature: 0.0
+  timeout_s: 90            # thời gian chờ tối đa cho một lần gọi LLM
+  max_attempts: 2          # nếu kế hoạch bị validator từ chối, gửi lỗi lại cho LLM thêm 1 lần

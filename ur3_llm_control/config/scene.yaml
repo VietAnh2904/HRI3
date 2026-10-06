@@ -1,0 +1,107 @@
+# ---------------------------------------------------------------------------
+# Scene description (Bai 03: gripper + camera).
+#
+# What each block is used for:
+#   table, zones, camera, gripper, motion  -> fixed workcell geometry (like the
+#       dimensions of a real workbench / the calibrated camera mount); used by
+#       the Gazebo world, the MoveIt planning scene, the skills and the prompt.
+#   objects.*.spawn_xy                   -> ONLY where the cubes are dropped
+#       when the Gazebo world is generated (the "person" who puts the cubes on
+#       the table).  The planner NEVER reads these values: every decision is
+#       made from what the camera detects (see perception.py / vision.py).
+#   objects.*.color                      -> the colour the camera looks for.
+#
+# All coordinates are in the `world` frame (= UR base_link, robot at origin),
+# metres.  The robot faces +x.  Reachability is verified offline by
+#   ros2 run ur3_llm_control check_scene
+# ---------------------------------------------------------------------------
+frame_id: world
+ur_type: ur3e                # ur3 | ur3e (must match the launch argument)
+planning_group: ur_manipulator
+ee_link: tool0
+
+table:
+  center: [0.30, 0.0]        # x, y of table centre
+  size: [0.40, 0.80]         # x, y extent
+  height: 0.10               # z of the table top
+
+cube_size: 0.04
+cube_mass: 0.05              # kg (light plastic block)
+
+# 5 blocks, 3 zones: a target zone may be occupied -> the system must clear it.
+# Initial layout = the demo required by the assignment: blue_cube is already
+# in Zone B, so "Put the red cube in Zone B" cannot be done by a direct
+# pick -> place.
+objects:
+  red_cube:    {color: red,    spawn_xy: [0.22, -0.16], rgba: [0.85, 0.08, 0.08, 1.0]}
+  yellow_cube: {color: yellow, spawn_xy: [0.22,  0.00], rgba: [0.95, 0.85, 0.05, 1.0]}
+  green_cube:  {color: green,  spawn_xy: [0.22,  0.16], rgba: [0.05, 0.70, 0.15, 1.0]}
+  blue_cube:   {color: blue,   spawn_xy: [0.40,  0.00], rgba: [0.05, 0.20, 0.90, 1.0]}
+  purple_cube: {color: purple, spawn_xy: [0.30, -0.30], rgba: [0.55, 0.10, 0.80, 1.0]}
+
+zones:                       # place zones (flat pads painted on the table)
+  zone_a: {label: "Zone A", xy: [0.40,  0.16], size: 0.09}
+  zone_b: {label: "Zone B", xy: [0.40,  0.00], size: 0.09}
+  zone_c: {label: "Zone C", xy: [0.40, -0.16], size: 0.09}
+
+# Fixed overhead RGB camera (Gazebo camera sensor -> /overhead_camera/image_raw).
+# Looks straight down at the table; the robot's home pose keeps the arm out of
+# the camera's view of the table (checked by check_scene).
+camera:
+  name: overhead_camera
+  xyz: [0.30, 0.0, 1.00]
+  rpy: [0.0, 1.5707963267948966, 0.0]   # camera x axis (optical axis in Gazebo) -> world -z
+  width: 640
+  height: 480
+  horizontal_fov: 1.047                 # rad (60 deg)
+  update_rate: 10.0
+  frame_id: camera_link
+  optical_frame_id: camera_optical_frame
+
+# Colour segmentation (HSV, OpenCV convention: H 0..179, S/V 0..255).
+vision:
+  min_saturation: 110
+  min_value: 45
+  hue_ranges:                            # [low, high]; red wraps around 0
+    red:    [[0, 8], [170, 179]]
+    yellow: [[20, 36]]
+    green:  [[45, 85]]
+    blue:   [[100, 125]]
+    purple: [[130, 160]]
+  min_area_px: 60
+  roi_expand_m: 0.03                 # table outline grown by this much = region searched
+
+# Two-finger parallel gripper mounted on tool0 (urdf/parallel_gripper.xacro).
+gripper:
+  tcp_offset: 0.07           # tool0 -> grasp centre (cube centre when gripped), along tool z
+  max_opening: 0.045         # per finger (gap = 2 * value = 9 cm)
+  closed_target: 0.0         # finger target when grasping (PD force ~ 400 N/m * 0.02 m = 8 N)
+  motion_time: 0.6           # s, duration of an open / close command
+  settle_time: 1.0           # s, max. extra wait for the fingers to stop
+  width_tolerance: 0.008     # m, measured gap vs cube size to accept a grasp
+
+motion:
+  # home = observation pose: arm raised above its base, out of the camera's
+  # view of the table (tool pointing down).
+  home_joints: [0.0, -1.745, 0.349, -0.175, -1.5708, 0.0]
+  approach_height: 0.12      # pre-grasp / pre-place height above the contact pose [m]
+  place_clearance: 0.004     # cube bottom above the table when released
+  velocity_scaling: 0.2
+  acceleration_scaling: 0.2
+  planning_time: 5.0
+  planning_attempts: 10
+  cartesian_step: 0.005
+  min_cartesian_fraction: 0.98
+  position_tolerance: 0.003        # m
+  # Negative collision padding for the held cube in MoveIt: a cube resting on
+  # the table touches it with 0 clearance and MoveIt would report that contact.
+  attached_shrink: 0.008           # m, subtracted from the cube's collision box
+
+# Where find_free_position() may park a block (temporary position)
+free_space:
+  grid_step: 0.02
+  min_object_distance: 0.10        # centre-to-centre to any other block
+  zone_margin: 0.05                # keep this far from the edge of every zone
+  table_margin: 0.04               # keep this far from the table edge
+  min_radius: 0.20                 # from the robot base axis
+  max_radius: 0.46
