@@ -1,7 +1,0 @@
-# Gazebo start pose of the arm = home / camera observation pose (scene.yaml motion.home_joints)
-shoulder_pan_joint: 0.0
-shoulder_lift_joint: -1.745
-elbow_joint: 0.349
-wrist_1_joint: -0.175
-wrist_2_joint: -1.5708
-wrist_3_joint: 0.0
