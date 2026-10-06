@@ -49,4 +49,3 @@ ros2 launch ur3_llm_control llm_robot.launch.py
 ```bash
 ros2 run ur3_llm_control send_command
 ```
-*(Ví dụ: `đặt khối cube màu xanh dương vào zone a`)*
