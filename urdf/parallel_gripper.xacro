@@ -1,0 +1,134 @@
+<?xml version="1.0"?>
+<!--
+  Two-finger parallel gripper for the UR3/UR3e (Bai 03).
+
+  * gripper_base_link is fixed to the robot's tool0 (tool z axis = approach
+    direction).  The fingers slide along tool0's y axis on two prismatic
+    joints; q = distance of the finger's inner face from the gripper centre
+    (0 = closed, max_opening = open, gap between the fingers = q_left + q_right).
+  * In Gazebo the fingers are driven by FORCE (ros2_control effort interface;
+    gripper_controller = joint_trajectory_controller with a PD on the finger
+    positions whose output is a force, limited to `effort` below): closing
+    squeezes the block and friction holds it.  Nothing ever moves the block
+    directly.
+  * gripper_tcp = grasp centre = where a gripped block's centre is
+    (tcp_offset in scene.yaml must match `tcp`).
+-->
+<robot xmlns:xacro="http://wiki.ros.org/xacro">
+
+  <xacro:macro name="box_inertia" params="m x y z">
+    <inertia ixx="${m * (y*y + z*z) / 12.0}" ixy="0" ixz="0"
+             iyy="${m * (x*x + z*z) / 12.0}" iyz="0"
+             izz="${m * (x*x + y*y) / 12.0}"/>
+  </xacro:macro>
+
+  <xacro:macro name="parallel_gripper" params="parent sim_gazebo:=false max_opening:=0.045 initial_opening:=0.045 tcp:=0.07">
+    <xacro:property name="base_x" value="0.05"/>
+    <xacro:property name="base_y" value="0.13"/>
+    <xacro:property name="base_z" value="0.03"/>
+    <xacro:property name="finger_x" value="0.024"/>
+    <xacro:property name="finger_y" value="0.012"/>
+    <xacro:property name="finger_z" value="0.055"/>
+
+    <joint name="gripper_mount_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="gripper_base_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <link name="gripper_base_link">
+      <visual>
+        <origin xyz="0 0 ${base_z / 2}" rpy="0 0 0"/>
+        <geometry><box size="${base_x} ${base_y} ${base_z}"/></geometry>
+        <material name="gripper_dark"><color rgba="0.9 0.2 0.1 1"/></material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 ${base_z / 2}" rpy="0 0 0"/>
+        <geometry><box size="${base_x} ${base_y} ${base_z}"/></geometry>
+      </collision>
+      <inertial>
+        <origin xyz="0 0 ${base_z / 2}" rpy="0 0 0"/>
+        <mass value="0.3"/>
+        <xacro:box_inertia m="0.3" x="${base_x}" y="${base_y}" z="${base_z}"/>
+      </inertial>
+    </link>
+
+    <xacro:macro name="finger" params="side sign">
+      <link name="${side}_finger_link">
+        <visual>
+          <origin xyz="0 ${sign * finger_y / 2} ${finger_z / 2}" rpy="0 0 0"/>
+          <geometry><box size="${finger_x} ${finger_y} ${finger_z}"/></geometry>
+          <material name="gripper_finger"><color rgba="0.9 0.2 0.1 1"/></material>
+        </visual>
+        <collision>
+          <origin xyz="0 ${sign * finger_y / 2} ${finger_z / 2}" rpy="0 0 0"/>
+          <geometry><box size="${finger_x} ${finger_y} ${finger_z}"/></geometry>
+        </collision>
+        <inertial>
+          <origin xyz="0 ${sign * finger_y / 2} ${finger_z / 2}" rpy="0 0 0"/>
+          <mass value="0.05"/>
+          <xacro:box_inertia m="0.05" x="${finger_x}" y="${finger_y}" z="${finger_z}"/>
+        </inertial>
+      </link>
+      <joint name="${side}_finger_joint" type="prismatic">
+        <parent link="gripper_base_link"/>
+        <child link="${side}_finger_link"/>
+        <origin xyz="0 0 ${base_z}" rpy="0 0 0"/>
+        <axis xyz="0 ${sign} 0"/>
+        <limit lower="0.0" upper="${max_opening}" effort="20.0" velocity="0.5"/>
+        <dynamics damping="15.0" friction="0.0"/>
+      </joint>
+      <gazebo reference="${side}_finger_link">
+        <mu1>1.5</mu1>
+        <mu2>1.5</mu2>
+        <kp>1000000.0</kp>
+        <kd>1.0</kd>
+        <minDepth>0.001</minDepth>
+        <maxVel>0.0</maxVel>
+        <material>Gazebo/Red</material>
+      </gazebo>
+      <gazebo reference="${side}_finger_joint">
+        <implicitSpringDamper>true</implicitSpringDamper>
+      </gazebo>
+    </xacro:macro>
+
+    <xacro:finger side="left" sign="1"/>
+    <xacro:finger side="right" sign="-1"/>
+
+    <!-- grasp centre (for RViz / debugging; the planner uses tcp_offset) -->
+    <link name="gripper_tcp"/>
+    <joint name="gripper_tcp_joint" type="fixed">
+      <parent link="gripper_base_link"/>
+      <child link="gripper_tcp"/>
+      <origin xyz="0 0 ${tcp}" rpy="0 0 0"/>
+    </joint>
+
+    <gazebo reference="gripper_base_link">
+      <material>Gazebo/Red</material>
+    </gazebo>
+
+    <xacro:if value="${sim_gazebo}">
+      <ros2_control name="GripperGazeboSystem" type="system">
+        <hardware>
+          <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+        </hardware>
+        <joint name="left_finger_joint">
+          <command_interface name="effort"/>
+          <state_interface name="position">
+            <param name="initial_value">${initial_opening}</param>
+          </state_interface>
+          <state_interface name="velocity"/>
+          <state_interface name="effort"/>
+        </joint>
+        <joint name="right_finger_joint">
+          <command_interface name="effort"/>
+          <state_interface name="position">
+            <param name="initial_value">${initial_opening}</param>
+          </state_interface>
+          <state_interface name="velocity"/>
+          <state_interface name="effort"/>
+        </joint>
+      </ros2_control>
+    </xacro:if>
+  </xacro:macro>
+</robot>
